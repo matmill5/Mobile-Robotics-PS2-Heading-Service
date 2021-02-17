@@ -19,13 +19,14 @@ using namespace std;
 ros::Publisher *g_twist_commander_ptr;
 tf::TransformListener *g_tf_listener_ptr;
 tf::StampedTransform g_robot_wrt_world_stf;
-double KV = 2.33;
-double HEADING_TOL = 0.005;
+double Kp = 5; //2.33;
+double HEADING_TOL = 0.002;
+double dt = 0.01;
 
 double heading_from_tf(tf::StampedTransform stf){
     tf::Quaternion quat;
     quat = stf.getRotation();
-    double theta = quat.getAngle();
+    double theta = tf::getYaw(quat);
     return theta;
 }
 
@@ -33,6 +34,7 @@ bool callback(heading_ros_service::ExampleServiceMsgRequest& request, heading_ro
 {
     ROS_INFO("my_heading_service callback activated");
     double desired_heading = request.desired_heading;
+    desired_heading = std::fmod(desired_heading,(2*M_PI));
     ROS_INFO("received request to rotate to heading of %f", desired_heading);
     double actual_heading;
     
@@ -55,27 +57,35 @@ bool callback(heading_ros_service::ExampleServiceMsgRequest& request, heading_ro
     actual_heading = heading_from_tf(g_robot_wrt_world_stf);
     
     //Feedback, heading logic
-    double heading_err = 100.00;
+    double heading_err = 100;
+
     while(fabs(heading_err)>HEADING_TOL){
     	g_tf_listener_ptr->lookupTransform("world", "robot0", ros::Time(0), g_robot_wrt_world_stf);
     	
     	//Extract heading
     	actual_heading = heading_from_tf(g_robot_wrt_world_stf);
     	ROS_INFO("current heading is %f", actual_heading);
-    	heading_err = desired_heading - actual_heading;
-    	if(heading_err>M_PI){heading_err-=2*M_PI;}
-    	if(heading_err<-M_PI){heading_err+=2*M_PI;}
+    	
+      //error
+      heading_err = desired_heading - actual_heading;
+      if(heading_err>M_PI) heading_err-=2*M_PI;
+    	if(heading_err<-M_PI) heading_err+=2*M_PI;
+      
     	ROS_INFO("heading error = %f", heading_err);
     	
-    	twist_cmd.angular.z = KV*heading_err;
-    	
-    	g_twist_commander_ptr->publish(twist_cmd);
+    	twist_cmd.angular.z = Kp*heading_err;
+      g_twist_commander_ptr->publish(twist_cmd);
     	ros::spinOnce();
-    	ros::Duration(0.01).sleep();
+    	ros::Duration(dt).sleep();
     }
     
+    // Make the robot stop completely after finish the command
     response.heading_achieved = true;
-    
+    for (int i=0; i<10; i++){
+      twist_cmd.angular.z = 0;
+      g_twist_commander_ptr->publish(twist_cmd);
+      ros::spinOnce();
+    }
   return true;
 }
 
