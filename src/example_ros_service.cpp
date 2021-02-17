@@ -34,8 +34,6 @@ bool callback(heading_ros_service::ExampleServiceMsgRequest& request, heading_ro
 {
     ROS_INFO("my_heading_service callback activated");
     double desired_heading = request.desired_heading;
-    desired_heading = std::fmod(desired_heading,(2*M_PI));
-    ROS_INFO("received request to rotate to heading of %f", desired_heading);
     double actual_heading;
     
     
@@ -55,7 +53,9 @@ bool callback(heading_ros_service::ExampleServiceMsgRequest& request, heading_ro
     g_tf_listener_ptr->lookupTransform("world", "robot0", ros::Time(0), g_robot_wrt_world_stf);
     
     actual_heading = heading_from_tf(g_robot_wrt_world_stf);
-    
+    desired_heading = std::fmod(actual_heading + desired_heading,(2*M_PI));
+    // ROS_INFO("received request to rotate to heading of %f", desired_heading);
+
     //Feedback, heading logic
     double heading_err = 100;
 
